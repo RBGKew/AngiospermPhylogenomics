@@ -1,0 +1,48 @@
+mvi = 0
+mni = 0
+
+NUM_RATE_CATEGORIES = 12 
+
+observed_tree <- readTrees("young_tree_smoothing_10_pruned_for_diversification_analyses.tre")[1] # or use "old_tree_smoothing_10_pruned_for_diversification_analyses.tre" for the old tree
+taxa <- observed_tree.taxa()
+root <- observed_tree.rootAge()
+tree_length <- observed_tree.treeLength()
+
+rho <- 1
+##################
+##################
+speciation_mean ~ dnExponential(5)
+moves[++mvi] = mvScaleBactrian(speciation_mean, lambda=1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation_mean, lambda=0.1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation_mean, lambda=0.01, weight=3, tune=true)
+speciation := fnDiscretizeDistribution(dnLognormal(ln(speciation_mean) - (((0.587405*3)^2)/2), (0.587405*3)), NUM_RATE_CATEGORIES)
+###
+extinction := rep(0, NUM_RATE_CATEGORIES)
+##################
+##################
+event_rate <- 10/tree_length # set this to 100/tree length for 100 expected shifts
+rate_cat_probs <- simplex( rep(1, NUM_RATE_CATEGORIES) )
+##################
+##################
+timetree ~ dnCDBDP(root,
+speciation,
+extinction,
+fnJC(NUM_RATE_CATEGORIES),
+event_rate,
+rate_cat_probs,
+rho,
+"time")
+timetree.clamp(observed_tree)
+##################
+##################
+mymodel = model(speciation)
+##################
+##################
+monitors[++mni] = mnModel(filename="output_all_bd/diversification.log",printgen=2, separator = TAB)
+monitors[++mni] = mnStochasticBranchRate(cdbdp=timetree, printgen=2, filename="output_all_bd/diversification_branches.log")
+monitors[++mni] = mnFile(filename="output_all_bd/diversification.trees", printgen=2, timetree)
+monitors[++mni] = mnScreen(printgen=2)
+##################
+##################
+mymcmc = mcmc(mymodel, monitors, moves, nruns=1)
+mymcmc.run(generations=100000000, tuningInterval=50)
