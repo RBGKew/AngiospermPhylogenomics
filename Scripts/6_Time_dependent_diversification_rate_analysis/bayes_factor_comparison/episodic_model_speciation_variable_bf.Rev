@@ -1,0 +1,90 @@
+mvi = 0
+mni = 0
+
+observed_tree <- readTrees("young_tree_smoothing_10_pruned_for_diversification_analyses.tre")[1]
+taxa <- observed_tree.taxa()
+root <- observed_tree.rootAge()
+tree_length <- observed_tree.treeLength()
+
+interval_times <- v(29.417465, 131.294773)
+
+num_intervals <- interval_times.size() + 1
+rho <- 0.02909027
+##################
+##################
+
+###global hyperprior defined in revgadgets and also variation###
+
+speciation_present ~ dnExponential(5)
+speciation_present.setValue(0.2)
+moves[++mvi] = mvScaleBactrian(speciation_present, lambda=1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation_present, lambda=0.1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation_present, lambda=0.01, weight=3, tune=true)
+
+log_speciation_present := ln(speciation_present)
+
+###window variation and rates###
+
+for (i in 1:(num_intervals-1)){
+local_variation[i] ~ dnExponential(5)
+moves[++mvi] = mvScaleBactrian(local_variation[i], lambda=1, weight=3, tune=true)
+log_speciation_other[i] ~ dnNormal(0, sd=local_variation[i]) 
+}
+
+speciation := fnassembleContinuousMRF(log_speciation_present,log_speciation_other,initialValueIsLogScale=TRUE,order=1)
+
+###moves###########
+
+moves[++mvi] = mvEllipticalSliceSamplingSimple(log_speciation_other,weight=5,tune=FALSE) 
+moves[++mvi] = mvHSRFIntervalSwap(log_speciation_other, local_variation, weight=5)
+
+###################
+
+window_lengths[1] <- interval_times[1]
+for (i in 1:(interval_times.size()-1)){
+window_lengths[i+1] <- interval_times[i+1] - interval_times[i]
+}
+window_lengths[window_lengths.size()+1] <- root - interval_times[interval_times.size()]
+
+for (i in 1:speciation.size()){
+scaled_speciation[i] := window_lengths[i] * speciation[i]
+}
+scaled_speciation_mean := sum(scaled_speciation)/root
+
+scaler ~ dnBeta(4,1)
+moves[++mvi]=mvScale(scaler)
+moves[++mvi] = mvScale(scaler,lambda=1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.01,weight=3.0, tune=true)
+
+extinction_mean := abs(scaler*scaled_speciation_mean)
+
+extinction := rep(extinction_mean, num_intervals)
+
+###################
+###################
+source("sampling_fractions.Rev")
+timetree ~ dnEpisodicBirthDeath(rootAge=root,
+lambdaRates=speciation, 
+lambdaTimes=interval_times, 
+muRates=extinction, 
+muTimes=interval_times, 
+rho=0.02909027, 
+taxa=taxa,
+incompleteClades=missing_species_per_clade,
+condition="time")
+timetree.clamp(observed_tree)
+###################
+###################
+mymodel = model(speciation)
+###################
+###################
+
+monitors[++mni] = mnScreen(printgen=10)
+
+###################
+###################
+ss_analysis = powerPosterior(mymodel, monitors, moves, "output/" + "test" + "/ss", cats=12, alpha=0.3)
+ss_analysis.run(generations=7000)
+ss = steppingStoneSampler("output/" + "test" + "/ss", "power", "likelihood", TAB)
+ss.marginal()

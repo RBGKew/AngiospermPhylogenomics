@@ -1,0 +1,51 @@
+mvi = 0
+mni = 0
+
+observed_tree <- readTrees("young_tree_smoothing_10_pruned_for_diversification_analyses.tre")[1]
+taxa <- observed_tree.taxa()
+root <- observed_tree.rootAge()
+tree_length <- observed_tree.treeLength()
+rho <- 0.02909027
+source("sampling_fractions_with_merger.Rev")
+
+##################
+##################
+
+speciation ~ dnExponential(5)
+speciation.setValue(0.2)
+moves[++mvi] = mvScaleBactrian(speciation, lambda=1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation, lambda=0.1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation, lambda=0.01, weight=3, tune=true)
+
+scaler ~ dnBeta(4,1)
+moves[++mvi]=mvScale(scaler)
+moves[++mvi] = mvScale(scaler,lambda=1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.01,weight=3.0, tune=true)
+
+extinction := abs(scaler*speciation)
+
+###################
+###################
+timetree ~ dnBirthDeath(rootAge=root,
+lambda=speciation, 
+mu=extinction, 
+rho <- 0.02909027, 
+taxa=taxa,
+incompleteClades=missing_species_per_clade,
+condition="time")
+timetree.clamp(observed_tree)
+###################
+###################
+mymodel = model(speciation)
+###################
+###################
+monitors[++mni] = mnScreen(printgen=10)
+
+ss_analysis = powerPosterior(mymodel, monitors, moves, "output/" + "test" + "/ss", cats=12, alpha=0.3)
+ss_analysis.run(generations=5000)
+ss = steppingStoneSampler("output/" + "test" + "/ss", "power", "likelihood", TAB)
+ss.marginal()
+
+
+
