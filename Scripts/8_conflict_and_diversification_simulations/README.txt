@@ -1,0 +1,1 @@
+conflict and diversification. Adjust speciation and extinciton rates, and effective population size, where commented at the start of the script in order to replicate the different analyses set out in the methods. 
