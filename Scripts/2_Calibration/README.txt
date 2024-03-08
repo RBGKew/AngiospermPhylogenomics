@@ -1,0 +1,1 @@
+input_for_treePL.treePL is the treePL input file we used in this study. Comments within the file indicate where the file needs to be edited in order to estimate each of the eight time-calibrated phylogenies that we estimated. 
