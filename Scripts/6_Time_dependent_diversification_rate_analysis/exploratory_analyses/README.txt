@@ -1,0 +1,1 @@
+time dependent diversification rate models implemented with the young tree and the old tree. sampling_fractions.Rev is read by each "episodic_model" script and provides the necessary sampling information. derive_inference_windows.R is used to set break points for different time periods, as set out in the supplementary methods. 
