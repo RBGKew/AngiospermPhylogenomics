@@ -1,0 +1,1 @@
+script for getting the percentage of missing extant diversity through time in the time-calibrated phylogenies. Comments indicate where to change the input tree (young or old), or the specified extinction fraction. 
