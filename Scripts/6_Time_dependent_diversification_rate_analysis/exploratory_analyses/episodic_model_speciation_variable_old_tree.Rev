@@ -1,0 +1,92 @@
+mvi = 0
+mni = 0
+
+observed_tree <- readTrees("pruned.tre")[1]
+taxa <- observed_tree.taxa()
+root <- observed_tree.rootAge()
+tree_length <- observed_tree.treeLength()
+
+interval_times <- v(7.696372, 12.712557, 17.731223, 22.748141, 27.760114, 32.771934, 37.802231, 42.813602, 47.833802, 52.864931, 57.926527, 62.937899, 67.954133, 73.008518, 78.027400, 83.054581, 88.085512, 93.200207, 98.262015, 103.295803, 108.308998, 113.345505, 118.405495, 123.914839, 129.717758, 134.865723, 140.418940, 147.076355, 155.354757, 163.400163, 171.875542, 179.992184, 190.024598, 206.103955, 223.375978)
+
+num_intervals <- interval_times.size() + 1
+rho <- 0.02909027
+##################
+##################
+
+###global hyperprior defined in revgadgets and also variation###
+
+speciation_present ~ dnExponential(5)
+speciation_present.setValue(0.2)
+moves[++mvi] = mvScaleBactrian(speciation_present, lambda=1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation_present, lambda=0.1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation_present, lambda=0.01, weight=3, tune=true)
+
+log_speciation_present := ln(speciation_present)
+
+###window variation and rates###
+
+for (i in 1:(num_intervals-1)){
+local_variation[i] ~ dnExponential(5)
+moves[++mvi] = mvScaleBactrian(local_variation[i], lambda=1, weight=3, tune=true)
+log_speciation_other[i] ~ dnNormal(0, sd=local_variation[i]) 
+}
+
+speciation := fnassembleContinuousMRF(log_speciation_present,log_speciation_other,initialValueIsLogScale=TRUE,order=1)
+
+###moves###########
+
+moves[++mvi] = mvEllipticalSliceSamplingSimple(log_speciation_other,weight=5,tune=FALSE) 
+moves[++mvi] = mvHSRFIntervalSwap(log_speciation_other, local_variation, weight=5)
+
+###################
+
+window_lengths[1] <- interval_times[1]
+for (i in 1:(interval_times.size()-1)){
+window_lengths[i+1] <- interval_times[i+1] - interval_times[i]
+}
+window_lengths[window_lengths.size()+1] <- root - interval_times[interval_times.size()]
+
+for (i in 1:speciation.size()){
+scaled_speciation[i] := window_lengths[i] * speciation[i]
+}
+scaled_speciation_mean := sum(scaled_speciation)/root
+
+scaler ~ dnBeta(4,1)
+moves[++mvi]=mvScale(scaler)
+moves[++mvi] = mvScale(scaler,lambda=1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.01,weight=3.0, tune=true)
+
+extinction_mean := abs(scaler*scaled_speciation_mean)
+
+extinction := rep(extinction_mean, num_intervals)
+
+###################
+###################
+source("sampling_fractions.Rev")
+timetree ~ dnEpisodicBirthDeath(rootAge=root,
+lambdaRates=speciation, 
+lambdaTimes=interval_times, 
+muRates=extinction, 
+muTimes=interval_times, 
+rho=0.02909027, 
+taxa=taxa,
+incompleteClades=missing_species_per_clade,
+condition="time")
+timetree.clamp(observed_tree)
+###################
+###################
+mymodel = model(speciation)
+###################
+###################
+monitors[++mni] = mnModel(filename="time_dependent_spec_with_ext/diversification.log",printgen=10, separator = TAB)
+monitors[++mni] = mnFile(filename="time_dependent_spec_with_ext/speciation.log",printgen=10, separator = TAB, speciation)
+monitors[++mni] = mnFile(filename="time_dependent_spec_with_ext/speciation_times.log",printgen=10, separator = TAB, interval_times)
+monitors[++mni] = mnFile(filename="time_dependent_spec_with_ext/extinction.log",printgen=10, separator = TAB, extinction)
+monitors[++mni] = mnFile(filename="time_dependent_spec_with_ext/extinction_times.log",printgen=10, separator = TAB, interval_times)
+monitors[++mni] = mnScreen(printgen=10)
+###################
+###################
+mymcmc = mcmc(mymodel, monitors, moves, nruns=1)
+mymcmc.burnin(generations=2000, tuningInterval=100)
+mymcmc.run(generations=5000000, tuningInterval=500)

@@ -1,0 +1,59 @@
+mvi = 0
+mni = 0
+
+observed_tree <- readTrees("young_tree_smoothing_10_pruned_for_diversification_analyses.tre")[1]
+taxa <- observed_tree.taxa()
+root <- observed_tree.rootAge()
+tree_length <- observed_tree.treeLength()
+rho <- 0.02909027
+source("sampling_fractions.Rev")
+
+##################
+##################
+
+speciation ~ dnExponential(5)
+speciation.setValue(0.2)
+moves[++mvi] = mvScaleBactrian(speciation, lambda=1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation, lambda=0.1, weight=3, tune=true)
+moves[++mvi] = mvScaleBactrian(speciation, lambda=0.01, weight=3, tune=true)
+
+scaler ~ dnBeta(4,1)
+moves[++mvi]=mvScale(scaler)
+moves[++mvi] = mvScale(scaler,lambda=1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.1,weight=3.0, tune=true)
+moves[++mvi] = mvScale(scaler,lambda=0.01,weight=3.0, tune=true)
+
+extinction := abs(scaler*speciation)
+
+###################
+###################
+timetree ~ dnBirthDeath(rootAge=root,
+lambda=speciation, 
+mu=extinction, 
+rho <- 0.02909027, 
+taxa=taxa,
+incompleteClades=missing_species_per_clade,
+condition="time")
+timetree.clamp(observed_tree)
+###################
+###################
+mymodel = model(speciation)
+###################
+###################
+monitors[++mni] = mnModel(filename="param_est/diversification.log",printgen=10, separator = TAB)
+monitors[++mni] = mnFile(filename="param_est/speciation.log",printgen=10, separator = TAB, speciation)
+monitors[++mni] = mnFile(filename="param_est/speciation_times.log",printgen=10, separator = TAB)
+monitors[++mni] = mnFile(filename="param_est/extinction.log",printgen=10, separator = TAB, extinction)
+monitors[++mni] = mnFile(filename="param_est/extinction_times.log",printgen=10, separator = TAB)
+monitors[++mni] = mnScreen(printgen=10)
+###################
+###################
+mymcmc = mcmc(mymodel, monitors, moves, nruns=1)
+mymcmc.burnin(generations=2000, tuningInterval=250)
+mymcmc.run(generations=50000, tuningInterval=200)
+monitors[++mni] = mnScreen(printgen=10)
+
+
+
+
+
